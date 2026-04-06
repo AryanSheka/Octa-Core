@@ -1,14 +1,17 @@
 from pydantic import BaseModel
 from typing import Optional
 
+
+class ModelConfig(BaseModel):
+    model_name : str
+    model_prompt : str
+    model_group : str
+
 class ModelInput(BaseModel):
-    base_model : str
-    base_model_prompt : str
-    judge_model : str
-    judge_model_prompt  : str
+    base_model : ModelConfig
+    judge_model : ModelConfig
     max_tries : Optional[int]=5
 
 class JudgeOutput(BaseModel):
     is_valid : bool
     feedback : Optional[str]= ""
-
