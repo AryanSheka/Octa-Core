@@ -1,11 +1,11 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Literal
 
 
 class ModelConfig(BaseModel):
     model_name : str
     model_prompt : str
-    model_group : str
+    model_group : Literal["gemini","ollama"]
 
 class ModelInput(BaseModel):
     base_model : ModelConfig
