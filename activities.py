@@ -33,7 +33,7 @@ async def execute_base_model(model:ModelConfig ,chat_history:list[dict]) -> str:
             return response.message.content
         
     except Exception as e:
-        raise ValueError(f"Judge has failed with error {str(e)}")
+        raise ValueError(f"Base model has failed with error {str(e)}")
     
 
 
