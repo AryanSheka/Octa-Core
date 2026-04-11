@@ -1,30 +1,38 @@
 import asyncio
 from temporalio.client import Client
 from temporalio.worker import Worker
-from workflows import Model
-from shared import ModelInput,ModelConfig
+from workflows import MultiJudgeValve
+from shared import SingleJudgeInput,ModelConfig,MultiJudgeInput
 
 async def main():
 
-    judge_model_name = ''
-    base_model_name = ''
+
+    judge_model_1_name = 'gemini-3-flash-preview'
+    judge_model_2_name = 'qwen3.5:9b'
+    judge_model_3_name = 'qwen3.5:9b' #examples. Can be filled with any other model id
+
+    base_model_name = 'deepseek-r1:8b'
     base_model_prompt = """"""
 
-    judge_prompt ="""System Role: You are a Logic Auditor. Your job is to verify the accuracy of ai model. 
-     In case the ai model is wrong, you should give a feedback to the model outlining exactly where it went wrong and where it should fix itself. Do not give the answer.
-    Just nudge it towards the correct method to get to the answer. Example you went wrong in step x, you should have done xyz.
- Output (JSON):
- Return a JSON object with:
- is_valid: (true/false)
- feedback: (A prompt for the generator to fix its specific error.Point out exactly why the ai is wrong and where it should rectify the answer. Should only be given when ai is wrong)
- """
-    base_model=ModelConfig(model_name=base_model_name,model_prompt=base_model_prompt,model_group='')
-    judge_model=ModelConfig(model_name=judge_model_name,model_prompt=judge_prompt,model_group='')
-    Data = ModelInput(base_model=base_model,judge_model=judge_model,max_tries=5)
+    j_1 =""""""
+    
+    j_2 = """"""
+
+    j_3=""""""
+    base_model=ModelConfig(model_name=base_model_name,model_prompt=base_model_prompt,model_group='ollama')
+    
+    judge_models=[
+        ModelConfig(model_name=judge_model_1_name,model_prompt=j_1,model_group='gemini'),
+        ModelConfig(model_name=judge_model_2_name,model_prompt=j_2,model_group='ollama'),
+        ModelConfig(model_name=judge_model_3_name,model_prompt=j_3,model_group='ollama')
+        ]
+    
+
+    Data = MultiJudgeInput(base_model=base_model,judge_panel=judge_models,max_tries=5,acceptability=1)
 
     client = await Client.connect("localhost:7233")
     handle = await client.start_workflow(
-        Model.run,
+        MultiJudgeValve.run,
         Data,
         id="ai-project-run-1",
         task_queue="valve queue",
