@@ -4,7 +4,7 @@ load_dotenv()
 from temporalio import activity
 import os
 from google import genai
-from shared import JudgeOutput, ModelConfig
+from shared import JudgeOutput, ModelConfig, LLMResponse
 import ollama
 
 @activity.defn
@@ -45,19 +45,23 @@ async def execute_judge_model(model:ModelConfig,prompt:str)->JudgeOutput:
             response = gemini_client.models.generate_content(
                 model = model.model_name,
                 contents = prompt,
-                config= {"response_mime_type":"application/json","response_schema":JudgeOutput}
+                config= {"response_mime_type":"application/json","response_schema":LLMResponse}
             )
-            return response.parsed
+            judge_response = response.parsed
+            final_output = JudgeOutput(weight=model.weight,llm_name=model.model_name,is_valid=judge_response.is_valid,feedback=judge_response.feedback)
+            return final_output
+
         elif(model.model_group == 'ollama'):
             ollama_messages = [{"role":"user","content":prompt}]
             ollama_client = ollama.AsyncClient()
             response = await ollama_client.chat(
                 model=model.model_name,
                 messages=ollama_messages,
-                format=JudgeOutput.model_json_schema()
+                format=LLMResponse.model_json_schema()
             )
-            judge_output = JudgeOutput.model_validate_json(response.message.content)
-            return judge_output
+            judge_response = LLMResponse.model_validate_json(response.message.content)
+            final_output = JudgeOutput(weight=model.weight,llm_name=model.model_name,is_valid=judge_response.is_valid,feedback=judge_response.feedback)
+            return final_output
         
     except Exception as e:
         raise ValueError(f"Judge has failed with error {str(e)}")

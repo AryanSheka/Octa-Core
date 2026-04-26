@@ -60,17 +60,18 @@ class MultiJudgeValve:
             workflow.logger.info("Executing Judge Panel parallely")
             results: list[JudgeOutput] = await asyncio.gather(*judge_set)
             
-            total_number_of_judges = len(data.judge_panel)
-            number_of_accepted_judges = 0
+            total_weight_of_accepted_judges = 0
+            total_judge_weight = sum(judge.weight for judge in data.judge_panel)
+
             consolidated_feedback = ""
 
             for result in results:
                 if(result.is_valid):
-                    number_of_accepted_judges+=1
+                    total_weight_of_accepted_judges+=result.weight
                 else:
-                    consolidated_feedback += f"\n\n {result.feedback}"
+                    consolidated_feedback += f"\n\n {result.llm_name} rejected your output with the result {result.feedback}"
 
-            if number_of_accepted_judges/total_number_of_judges >= data.acceptability:
+            if total_weight_of_accepted_judges/total_judge_weight >= data.acceptability:
                 workflow.logger.info(f"Valve opened at try number {current_try}")
                 return response    
             
