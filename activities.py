@@ -5,15 +5,12 @@ from google import genai
 from shared import JudgeOutput, ModelConfig, LLMResponse
 import ollama
 
-load_dotenv()
-ollama_client = ollama.AsyncClient()
-if(os.environ.get("GEMINI_API_KEY")):
-    gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-
 
 class OrchestrationActivities:
     def __init__(self):
+        load_dotenv()
         self.ollama_client = ollama.AsyncClient()
+        self.gemini_client = None
         if(os.environ.get("GEMINI_API_KEY")):
             self.gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
@@ -22,7 +19,7 @@ class OrchestrationActivities:
     async def execute_base_model(self,model:ModelConfig ,chat_history:list[dict]) -> str:
         try:
             if(model.model_group=='gemini'):
-                response = gemini_client.models.generate_content(
+                response = self.gemini_client.models.generate_content(
                     model = model.model_name,
                     contents = chat_history,
                 )
@@ -33,7 +30,7 @@ class OrchestrationActivities:
                 for msg in chat_history:
                     raw_text = msg["parts"][0]["text"]
                     ollama_messages.append({"role": msg["role"], "content": raw_text})
-                response = await ollama_client.chat(
+                response = await self.ollama_client.chat(
                 model=model.model_name, 
                 messages=ollama_messages)
                 return response.message.content
@@ -47,8 +44,7 @@ class OrchestrationActivities:
     async def execute_judge_model(self,model:ModelConfig,prompt:str)->JudgeOutput:
         try:
             if(model.model_group=='gemini'):
-                gemini_client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
-                response = gemini_client.models.generate_content(
+                response = self.gemini_client.models.generate_content(
                     model = model.model_name,
                     contents = prompt,
                     config= {"response_mime_type":"application/json","response_schema":LLMResponse}
@@ -59,8 +55,7 @@ class OrchestrationActivities:
 
             elif(model.model_group == 'ollama'):
                 ollama_messages = [{"role":"user","content":prompt}]
-                ollama_client = ollama.AsyncClient()
-                response = await ollama_client.chat(
+                response = await self.ollama_client.chat(
                     model=model.model_name,
                     messages=ollama_messages,
                     format=LLMResponse.model_json_schema()
