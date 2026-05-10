@@ -5,8 +5,7 @@ import asyncio
 from shared import SingleJudgeInput, MultiJudgeInput, JudgeOutput
 
 with workflow.unsafe.imports_passed_through():
-    from activities import execute_base_model
-    from activities import execute_judge_model
+    from activities import OrchestrationActivities
 
 @workflow.defn
 class SingleJudgeValve:
@@ -18,10 +17,10 @@ class SingleJudgeValve:
         response=""
         while(current_try<=max_try):
             workflow.logger.info(f"Try Number {current_try}")
-            response = await workflow.execute_activity(execute_base_model,args=[data.base_model,chat_history],start_to_close_timeout=timedelta(seconds=600))
+            response = await workflow.execute_activity(OrchestrationActivities.execute_base_model,args=[data.base_model,chat_history],start_to_close_timeout=timedelta(seconds=600))
             
             formatted_judge_input = f"{data.judge_model.model_prompt}\n\n Original Prompt given to AI :\n {data.base_model.model_prompt}\n\n AI Output to Grade:\n{response}"
-            result = await workflow.execute_activity(execute_judge_model,args=[data.judge_model,formatted_judge_input],start_to_close_timeout=timedelta(seconds=600))
+            result = await workflow.execute_activity(OrchestrationActivities.execute_judge_model,args=[data.judge_model,formatted_judge_input],start_to_close_timeout=timedelta(seconds=600))
             
             if(result.is_valid):
                 workflow.logger.info(f"Valve Opened at try {current_try}")
@@ -47,14 +46,14 @@ class MultiJudgeValve:
         response=""
         while(current_try<=max_try):
             workflow.logger.info(f"Try Number {current_try}")
-            response = await workflow.execute_activity(execute_base_model,args=[data.base_model,chat_history],start_to_close_timeout=timedelta(seconds=600))
+            response = await workflow.execute_activity(OrchestrationActivities.execute_base_model,args=[data.base_model,chat_history],start_to_close_timeout=timedelta(seconds=600))
             
 
             judge_set = []
 
             for judge in data.judge_panel:
                 formatted_judge_input = f"{judge.model_prompt}\n\n Original Prompt given to AI :\n {data.base_model.model_prompt}\n\n AI Output to Grade:\n{response}"
-                judge_set.append(workflow.execute_activity(execute_judge_model,args=[judge,formatted_judge_input],start_to_close_timeout=timedelta(seconds=600)))
+                judge_set.append(workflow.execute_activity(OrchestrationActivities.execute_judge_model,args=[judge,formatted_judge_input],start_to_close_timeout=timedelta(seconds=600)))
 
             
             workflow.logger.info("Executing Judge Panel parallely")
