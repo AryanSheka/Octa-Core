@@ -4,6 +4,7 @@ import os
 from google import genai
 from shared import JudgeOutput, ModelConfig, LLMResponse
 from temporalio.exceptions import ApplicationError
+from google.genai import errors
 import ollama
 
 
@@ -19,12 +20,20 @@ class OrchestrationActivities:
             if(model.model_group=='gemini'):
                 if(self.gemini_client is None):
                     self.initiate_client("gemini")
-                response = self.gemini_client.models.generate_content(
-                    model = model.model_name,
-                    contents = chat_history,
-                )
 
-                return response.text
+                try:
+                    response = self.gemini_client.models.generate_content(
+                        model = model.model_name,
+                        contents = chat_history,
+                    )
+
+                    return response.text
+                except errors.APIError as e:
+                    if e.code in (400,401,403):
+                        raise ApplicationError(f"The provided Gemini Api Key is invalid or you lack permissions. Details: {str(e)}", non_retryable=True)
+                    
+                    raise e
+
             elif(model.model_group =='ollama'):
                 if(self.ollama_client is None):
                     self.initiate_client("ollama")
@@ -51,14 +60,20 @@ class OrchestrationActivities:
             if(model.model_group=='gemini'):
                 if(self.gemini_client is None):
                     self.initiate_client("gemini")
-                response = self.gemini_client.models.generate_content(
-                    model = model.model_name,
-                    contents = prompt,
-                    config= {"response_mime_type":"application/json","response_schema":LLMResponse}
-                )
-                judge_response = response.parsed
-                final_output = JudgeOutput(weight=model.weight,llm_name=model.model_name,is_valid=judge_response.is_valid,feedback=judge_response.feedback)
-                return final_output
+                try:
+                    response = self.gemini_client.models.generate_content(
+                        model = model.model_name,
+                        contents = prompt,
+                        config= {"response_mime_type":"application/json","response_schema":LLMResponse}
+                    )
+                    judge_response = response.parsed
+                    final_output = JudgeOutput(weight=model.weight,llm_name=model.model_name,is_valid=judge_response.is_valid,feedback=judge_response.feedback)
+                    return final_output
+                except errors.APIError as e:
+                    if e.code in (400,401,403):
+                        raise ApplicationError(f"The provided Gemini Api Key is invalid or you lack permissions. Details: {str(e)}", non_retryable=True)
+                    
+                    raise e
 
             elif(model.model_group == 'ollama'):
                 if(self.ollama_client is None):
