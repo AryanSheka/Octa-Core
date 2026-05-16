@@ -61,7 +61,7 @@ class OrchestrationActivities:
                 if(self.gemini_client is None):
                     self.initiate_client("gemini")
                 try:
-                    response = self.gemini_client.models.generate_content(
+                    response = await self.gemini_client.aio.models.generate_content(
                         model = model.model_name,
                         contents = prompt,
                         config= {"response_mime_type":"application/json","response_schema":LLMResponse}
