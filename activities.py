@@ -41,10 +41,17 @@ class OrchestrationActivities:
                 for msg in chat_history:
                     raw_text = msg["parts"][0]["text"]
                     ollama_messages.append({"role": msg["role"], "content": raw_text})
-                response = await self.ollama_client.chat(
-                model=model.model_name, 
-                messages=ollama_messages)
-                return response.message.content
+                try:
+                    response = await self.ollama_client.chat(
+                    model=model.model_name, 
+                    messages=ollama_messages)
+                    return response.message.content
+                
+                except ollama.ResponseError as e:
+                    if e.status_code == 404:
+                        raise ApplicationError(f"Ollama client has failed with error {e}",non_retryable=True)
+                    raise e
+
             else:
                 raise ApplicationError(f"Unsupported model group: {model.model_group}", non_retryable=True)
         except ApplicationError:
@@ -79,14 +86,19 @@ class OrchestrationActivities:
                 if(self.ollama_client is None):
                     self.initiate_client("ollama")
                 ollama_messages = [{"role":"user","content":prompt}]
-                response = await self.ollama_client.chat(
-                    model=model.model_name,
-                    messages=ollama_messages,
-                    format=LLMResponse.model_json_schema()
-                )
-                judge_response = LLMResponse.model_validate_json(response.message.content)
-                final_output = JudgeOutput(weight=model.weight,llm_name=model.model_name,is_valid=judge_response.is_valid,feedback=judge_response.feedback)
-                return final_output
+                try:
+                    response = await self.ollama_client.chat(
+                        model=model.model_name,
+                        messages=ollama_messages,
+                        format=LLMResponse.model_json_schema()
+                    )
+                    judge_response = LLMResponse.model_validate_json(response.message.content)
+                    final_output = JudgeOutput(weight=model.weight,llm_name=model.model_name,is_valid=judge_response.is_valid,feedback=judge_response.feedback)
+                    return final_output
+                except ollama.ResponseError as e:
+                    if e.status_code == 404:
+                        raise ApplicationError(f"Ollama client has failed with error {e}",non_retryable=True)
+                    raise e
             
             else:
                 raise ApplicationError(f"Unsupported Model group : {model.model_group}",non_retryable=True)
