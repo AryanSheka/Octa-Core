@@ -22,7 +22,7 @@ class OrchestrationActivities:
                     self.initiate_client("gemini")
 
                 try:
-                    response = self.gemini_client.models.generate_content(
+                    response = await self.gemini_client.aio.models.generate_content(
                         model = model.model_name,
                         contents = chat_history,
                     )
