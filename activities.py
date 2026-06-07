@@ -6,116 +6,193 @@ from shared import JudgeOutput, ModelConfig, LLMResponse
 from temporalio.exceptions import ApplicationError
 from google.genai import errors
 import ollama
+import anthropic
+from anthropic import AsyncAnthropic
+from abc import ABC,abstractmethod
 
 
-class OrchestrationActivities:
+class ModelProvider(ABC):
+    @abstractmethod
+    async def base_model(self,model:ModelConfig ,chat_history:list[dict]) -> str:
+        pass
+
+    @abstractmethod
+    async def judge_model(self,model:ModelConfig,prompt:str)->JudgeOutput:
+        pass
+
+
+class GeminiProvider(ModelProvider):
     def __init__(self):
-        self.ollama_client = None
-        self.gemini_client = None
+        load_dotenv()
+        api_key =os.environ.get("GEMINI_API_KEY")
+        if(api_key):
+            self._gemini_client = genai.Client(api_key=api_key)
+        else:
+            raise ApplicationError(f"GEMINI_API_KEY Missing from environment",non_retryable=True)
 
-
-    @activity.defn
-    async def execute_base_model(self,model:ModelConfig ,chat_history:list[dict]) -> str:
+    async def base_model(self, model:ModelConfig, chat_history:list[dict])->str:
         try:
-            if(model.model_group=='gemini'):
-                if(self.gemini_client is None):
-                    self.initiate_client("gemini")
+            response = await self._gemini_client.aio.models.generate_content(
+                            model = model.model_name,
+                            contents = chat_history,
+                        )
 
-                try:
-                    response = await self.gemini_client.aio.models.generate_content(
-                        model = model.model_name,
-                        contents = chat_history,
-                    )
-
-                    return response.text
-                except errors.APIError as e:
-                    if e.code in (400,401,403):
-                        raise ApplicationError(f"The provided Gemini Api Key is invalid or you lack permissions. Details: {str(e)}", non_retryable=True)
-                    
-                    raise e
-
-            elif(model.model_group =='ollama'):
-                if(self.ollama_client is None):
-                    self.initiate_client("ollama")
-                ollama_messages=[]
-                for msg in chat_history:
-                    raw_text = msg["parts"][0]["text"]
-                    ollama_messages.append({"role": msg["role"], "content": raw_text})
-                try:
-                    response = await self.ollama_client.chat(
-                    model=model.model_name, 
-                    messages=ollama_messages)
-                    return response.message.content
-                
-                except ollama.ResponseError as e:
-                    if e.status_code == 404:
-                        raise ApplicationError(f"Ollama client has failed with error {e}",non_retryable=True)
-                    raise e
-
-            else:
-                raise ApplicationError(f"Unsupported model group: {model.model_group}", non_retryable=True)
-        except ApplicationError:
-            raise
-        except Exception as e:
-            raise ValueError(f"Base model has failed with error {str(e)}")
+            return response.text
         
+        except errors.APIError as e:
+            self._raise_if_fatal(e)
 
-
-    @activity.defn
-    async def execute_judge_model(self,model:ModelConfig,prompt:str)->JudgeOutput:
+    async def judge_model(self, model:ModelConfig, prompt:str)->JudgeOutput:
         try:
-            if(model.model_group=='gemini'):
-                if(self.gemini_client is None):
-                    self.initiate_client("gemini")
-                try:
-                    response = await self.gemini_client.aio.models.generate_content(
+            response = await self._gemini_client.aio.models.generate_content(
                         model = model.model_name,
                         contents = prompt,
                         config= {"response_mime_type":"application/json","response_schema":LLMResponse}
                     )
-                    judge_response = response.parsed
-                    final_output = JudgeOutput(weight=model.weight,llm_name=model.model_name,is_valid=judge_response.is_valid,feedback=judge_response.feedback)
-                    return final_output
-                except errors.APIError as e:
-                    if e.code in (400,401,403):
-                        raise ApplicationError(f"The provided Gemini Api Key is invalid or you lack permissions. Details: {str(e)}", non_retryable=True)
-                    
-                    raise e
+            judge_response = response.parsed
+            final_output = JudgeOutput(weight=model.weight,llm_name=model.model_name,is_valid=judge_response.is_valid,feedback=judge_response.feedback)
+            return final_output
+        
+        except errors.APIError as e:
+            self._raise_if_fatal(e)
 
-            elif(model.model_group == 'ollama'):
-                if(self.ollama_client is None):
-                    self.initiate_client("ollama")
-                ollama_messages = [{"role":"user","content":prompt}]
-                try:
-                    response = await self.ollama_client.chat(
+
+    @staticmethod
+    def _raise_if_fatal(e:errors.APIError):
+        if e.code in (400,401,403):
+            raise ApplicationError(f"The provided Gemini Api Key is invalid or you lack permissions or tokens limit reached. Details: {str(e)}", non_retryable=True)
+        
+        raise e
+
+
+class OllamaProvider(ModelProvider):
+    def __init__(self):
+        self._ollama_client = ollama.AsyncClient()
+
+    async def base_model(self, model:ModelConfig, chat_history:list[dict])->str:
+        ollama_messages=[]
+        for msg in chat_history:
+            raw_text = msg["parts"][0]["text"]
+            ollama_messages.append({"role": msg["role"], "content": raw_text})
+        try:
+            response = await self._ollama_client.chat(
+            model=model.model_name, 
+            messages=ollama_messages)
+            return response.message.content
+        
+        except ollama.ResponseError as e:
+            self._raise_if_fatal(e)
+
+    async def judge_model(self, model:ModelConfig, prompt:str)->JudgeOutput:
+        try:
+            ollama_messages = [{"role":"user","content":prompt}]
+            response = await self._ollama_client.chat(
                         model=model.model_name,
                         messages=ollama_messages,
                         format=LLMResponse.model_json_schema()
                     )
-                    judge_response = LLMResponse.model_validate_json(response.message.content)
-                    final_output = JudgeOutput(weight=model.weight,llm_name=model.model_name,is_valid=judge_response.is_valid,feedback=judge_response.feedback)
-                    return final_output
-                except ollama.ResponseError as e:
-                    if e.status_code == 404:
-                        raise ApplicationError(f"Ollama client has failed with error {e}",non_retryable=True)
-                    raise e
-            
-            else:
-                raise ApplicationError(f"Unsupported Model group : {model.model_group}",non_retryable=True)
+            judge_response = LLMResponse.model_validate_json(response.message.content)
+            final_output = JudgeOutput(weight=model.weight,llm_name=model.model_name,is_valid=judge_response.is_valid,feedback=judge_response.feedback)
+            return final_output
         
-        except ApplicationError:
-            raise
-            
-        except Exception as e:
-            raise ValueError(f"Judge has failed with error {str(e)}")
-        
-    def initiate_client(self,model_group:str):
+        except ollama.ResponseError as e:
+            self._raise_if_fatal(e)
+
+
+    @staticmethod
+    def _raise_if_fatal(e:ollama.ResponseError):
+        if e.status_code == 404:
+            raise ApplicationError(f"Ollama client has failed with error {e}",non_retryable=True)
+        raise e
+    
+
+class AnthropicProvider(ModelProvider):
+    def __init__(self):
         load_dotenv()
-        if(model_group=='gemini'):
-            api_key =os.environ.get("GEMINI_API_KEY")
-            if(api_key):
-                self.gemini_client = genai.Client(api_key=api_key)
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        
+        if not api_key:
+            raise ApplicationError("ANTHROPIC_API_KEY missing from environment", non_retryable=True)
+        else:
+            self._anthropic_client = AsyncAnthropic(api_key=api_key)
+
+    async def base_model(self, model:ModelConfig, chat_history:list[dict])->str:
+        anthropic_messages = []
+        for msg in chat_history:
+            raw_text=msg["parts"][0]["text"]
+            role = ""
+            if msg["role"]=="model":
+                role = "assistant"
             else:
-                raise ApplicationError(f"GEMINI_API_KEY Missing from environment",non_retryable=True)
-        elif(model_group=='ollama'):
-            self.ollama_client = ollama.AsyncClient()
+                role = msg["role"]
+            
+            anthropic_messages.append({"role":role,"content":raw_text})
+
+        try:
+            response = await self._anthropic_client.messages.create(
+                model=model.model_name,
+                max_tokens=4096,
+                messages=anthropic_messages
+            )
+            return response.content[0].text
+        
+        except anthropic.APIStatusError as e:
+            self._raise_if_fatal(e)
+
+        
+    async def judge_model(self, model:ModelConfig, prompt:str)->JudgeOutput:
+        anthropic_messages=[{"role":"user","content":prompt}]
+        try:
+            response = await self._anthropic_client.messages.parse(
+                model=model.model_name,
+                max_tokens=4096,
+                messages=anthropic_messages,
+                output_format=LLMResponse
+            )
+            parsed_response = response.parsed_output
+            final_output= JudgeOutput(weight = model.weight,llm_name=model.model_name,is_valid=parsed_response.is_valid,feedback=parsed_response.feedback)
+            return final_output
+        
+        except anthropic.APIStatusError as e:
+            self._raise_if_fatal(e)
+        
+    @staticmethod
+    def _raise_if_fatal(e:anthropic.APIStatusError):
+        if e.status_code in (400,401,402,403,404):
+            raise ApplicationError(f"Anthropic client failed with error: {e}",non_retryable=True)
+        raise e
+
+        
+
+Providers: dict[str, type[ModelProvider]] = {
+    "gemini" : GeminiProvider,
+    "ollama" : OllamaProvider,
+    "anthropic":AnthropicProvider
+}
+
+
+class OrchestrationActivities:
+    def __init__(self):
+        self._providers = {}
+
+    def _get_provider(self,model:ModelConfig):
+        if model.model_group not in self._providers:
+            cls = Providers.get(model.model_group)
+            if cls is None:
+                raise ApplicationError(f"Unsupported Model Group {model.model_group}",non_retryable = True)
+    
+            self._providers[model.model_group] = cls()
+        return self._providers[model.model_group]
+
+    @activity.defn
+    async def execute_base_model(self,model:ModelConfig ,chat_history:list[dict]) -> str:
+        provider = self._get_provider(model)
+
+        return await provider.base_model(model=model,chat_history=chat_history)
+
+    @activity.defn
+    async def execute_judge_model(self,model:ModelConfig,prompt:str)->JudgeOutput:
+       provider = self._get_provider(model=model)
+
+       return await provider.judge_model(model=model,prompt = prompt)
+

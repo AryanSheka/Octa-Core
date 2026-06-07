@@ -30,8 +30,6 @@ class SingleJudgeValve:
                 current_try+=1
                 chat_history.append({"role":"model","parts":[{"text":response}]})
                 chat_history.append({"role":"user","parts":[{"text":result.feedback}]})
-                if(data.base_model.model_group!= 'ollama' or data.judge_model.model_group != 'ollama'):
-                    await workflow.sleep(30) #sleep to avoid crossing token limit in free tier
 
         return f"Maximum tries crossed. Valve closed. Final output : \n\n {response}"
         
@@ -78,6 +76,5 @@ class MultiJudgeValve:
                 current_try+=1
                 chat_history.append({"role":"model","parts":[{"text":response}]})
                 chat_history.append({"role":"user","parts":[{"text":consolidated_feedback}]})
-                await workflow.sleep(30) #sleep to avoid crossing token limit in free tier
 
         return f"Maximum tries crossed. Valve closed. Final output : \n\n {response}" # open valve after crossing max tries
