@@ -7,6 +7,8 @@ from temporalio.exceptions import ApplicationError
 from google.genai import errors
 import ollama
 import anthropic
+import openai
+from openai import AsyncOpenAI
 from anthropic import AsyncAnthropic
 from abc import ABC,abstractmethod
 
@@ -59,8 +61,8 @@ class GeminiProvider(ModelProvider):
 
     @staticmethod
     def _raise_if_fatal(e:errors.APIError):
-        if e.code in (400,401,403):
-            raise ApplicationError(f"The provided Gemini Api Key is invalid or you lack permissions or tokens limit reached. Details: {str(e)}", non_retryable=True)
+        if e.code in (400,401,403,404,429):
+            raise ApplicationError(f"The Gemini Client has failed with error. Details: {str(e)}", non_retryable=True)
         
         raise e
 
@@ -163,11 +165,66 @@ class AnthropicProvider(ModelProvider):
         raise e
 
         
+class OpenaiProvider(ModelProvider):
+    def __init__(self):
+        load_dotenv()
+        api_key = os.environ.get("OPENAI_API_KEY")
+
+        if not api_key:
+            raise ApplicationError("OPEN_AI_API_KEY is missing from environment",non_retryable=True)
+        else:
+            self._openaiclient = AsyncOpenAI(api_key=api_key)
+            
+    async def base_model(self, model:ModelConfig, chat_history:list[dict])->str:
+        openai_messages = []
+        for msg in chat_history:
+            raw_text=msg["parts"][0]["text"]
+            role = ""
+            if msg["role"]=="model":
+                role = "assistant"
+            else:
+                role = msg["role"]
+            openai_messages.append({"role":role,"content":raw_text})
+        
+        try:
+            response = await self._openaiclient.responses.create(
+                model = model.model_name,
+                input=openai_messages)
+            return response.output_text
+
+        except openai.APIError as e:
+            self._raise_if_fatal(e)
+
+    async def judge_model(self, model:ModelConfig, prompt:str)->JudgeOutput:
+        openai_messages =[{"role":"user","content":prompt}]
+        try:
+            responses = await self._openaiclient.responses.parse(
+                model=model.model_name,
+                input=openai_messages,
+                text_format=LLMResponse
+            )
+            parsed_response = responses.output_parsed
+            final_output = JudgeOutput(weight=model.weight,llm_name=model.model_name,is_valid=parsed_response.is_valid,feedback=parsed_response.feedback)
+            return final_output
+        
+        except openai.APIError as e:
+            self._raise_if_fatal(e)
+
+
+
+
+    @staticmethod
+    def _raise_if_fatal(e: openai.APIError):
+        if e.status_code in (401, 403, 429):
+            raise ApplicationError(f"OpenAI client failed with error: {e}", non_retryable=True)
+        raise e
+
 
 Providers: dict[str, type[ModelProvider]] = {
     "gemini" : GeminiProvider,
     "ollama" : OllamaProvider,
-    "anthropic":AnthropicProvider
+    "anthropic":AnthropicProvider,
+    "openai":OpenaiProvider
 }
 
 
@@ -195,4 +252,3 @@ class OrchestrationActivities:
        provider = self._get_provider(model=model)
 
        return await provider.judge_model(model=model,prompt = prompt)
-

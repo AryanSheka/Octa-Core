@@ -5,7 +5,7 @@ from typing import Optional, Literal
 class ModelConfig(BaseModel):
     model_name : str = Field(description="The specific id of the model to be used. Example 'gemini-2.5-flash' ")
     model_prompt : str = Field(description="The prompt for the model")
-    model_group : Literal["gemini","ollama","anthropic"] = Field(description="The provider group of the model. Example gemini, ollama ")
+    model_group : Literal["gemini","ollama","anthropic","openai"] = Field(description="The provider group of the model. Example gemini, ollama ")
     weight : float = Field(description="Relative weight of the model when computing. Only valid when the model is a judge model. Higher value increases its influence when computing acceptance",default=1,gt=0)
 
 class SingleJudgeInput(BaseModel):
