@@ -77,4 +77,4 @@ class MultiJudgeValve:
                 chat_history.append({"role":"model","parts":[{"text":response}]})
                 chat_history.append({"role":"user","parts":[{"text":consolidated_feedback}]})
 
-        return f"Maximum tries crossed. Valve closed. Final output : \n\n {response}" # open valve after crossing max tries
+        return f"Maximum tries crossed. Valve Opened. Final output : \n\n {response}" # open valve after crossing max tries

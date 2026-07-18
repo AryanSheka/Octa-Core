@@ -173,7 +173,7 @@ class OpenaiProvider(ModelProvider):
         if not api_key:
             raise ApplicationError("OPEN_AI_API_KEY is missing from environment",non_retryable=True)
         else:
-            self._openaiclient = AsyncOpenAI(api_key=api_key)
+            self._openai_client = AsyncOpenAI(api_key=api_key)
             
     async def base_model(self, model:ModelConfig, chat_history:list[dict])->str:
         openai_messages = []
@@ -187,7 +187,7 @@ class OpenaiProvider(ModelProvider):
             openai_messages.append({"role":role,"content":raw_text})
         
         try:
-            response = await self._openaiclient.responses.create(
+            response = await self._openai_client.responses.create(
                 model = model.model_name,
                 input=openai_messages)
             return response.output_text
@@ -198,7 +198,7 @@ class OpenaiProvider(ModelProvider):
     async def judge_model(self, model:ModelConfig, prompt:str)->JudgeOutput:
         openai_messages =[{"role":"user","content":prompt}]
         try:
-            responses = await self._openaiclient.responses.parse(
+            responses = await self._openai_client.responses.parse(
                 model=model.model_name,
                 input=openai_messages,
                 text_format=LLMResponse
