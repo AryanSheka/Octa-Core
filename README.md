@@ -95,5 +95,5 @@ Limitations
    ```
    python starter.py
    ```
-<img width="1242" height="767" alt="Example ss" src="https://github.com/user-attachments/assets/05a0d105-74d1-4fef-bd91-64ae6ad05c15" />
+<img width="1262" height="769" alt="Example ss" src="https://github.com/user-attachments/assets/dd6596de-9039-4b0a-9f87-7bf189ce526c" />
 Example of initialization of base models and judge models inside `starter.py`
