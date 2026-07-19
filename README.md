@@ -1,7 +1,7 @@
 # Octa-Core : Distributed AI Workflow Orchestrator
 
 ## Idea
-This project originates from the simple idea, rather than you as a user giving an llm feedback to improve its output, why not let another llm do it for you.
+This project originates from the simple idea, rather than you as a user giving an LLM feedback to improve its output, why not let another LLM do it for you.
 
 ## Problem Statement
 LLMs on their own are highly unreliable due to hallucinations and in usecases which require the LLM to generate code, this can lead to faulty code or code with a lot of holes which the user has to fix on their own.
