@@ -14,7 +14,7 @@ By leveraging the strengths of different families of LLMs a user can specificall
 
 - A user first configures the Base Model responsible for generating the output to the user.
 - Then they configure the Judges (either singular or a panel of judges) with their own instructions.
-- Upon starting the workflow, the Base Model generates and output which the judge panel evaluates.
+- Upon starting the workflow, the Base Model generates an output which the judge panel evaluates.
 - Each of the Judges gives a verdict `is_valid:` `True` or `False`.
 - If a `False` verdict is returned, the Judge provides targeted critique (e.g., "Line 23 violates instruction X").
 - If Valve Consensus is not reached the feedback along with the original prompts and output is given back to the base model as `chat_history`. This is called as one retry.
